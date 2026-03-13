@@ -54,7 +54,7 @@ if st.button("Generate Plan"):
         with st.spinner("Gemini is thinking..."):
             # New SDK syntax
             response = client.models.generate_content(
-                model="gemini-2.5-flash", 
+                model="gemini-2.0-flash", 
                 contents=f"Create a time-blocked schedule for: {user_prompt}. Energy: {energy}"
             )
             
