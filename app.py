@@ -73,7 +73,7 @@ if st.button("Generate My Plan"):
             try:
                 client = genai.Client(api_key=API_KEY)
                 response = client.models.generate_content(
-                    model="gemini-1.5-flash", 
+                    model="gemini-2.0-flash", 
                     contents=f"User Tasks: {user_prompt}. Energy: {energy}. Create a clear, time-blocked daily schedule."
                 )
                 
