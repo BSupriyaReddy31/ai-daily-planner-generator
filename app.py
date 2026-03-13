@@ -1,92 +1,92 @@
 import streamlit as st
 from google import genai
+from groq import Groq
 import os
 
-# --- 1. PAGE CONFIG ---
+# --- 1. PAGE SETUP ---
 st.set_page_config(page_title="AI Daily Architect", page_icon="⚡", layout="centered")
 
-# --- 2. THE "SECRET" CHECK ---
-# We use a try-except to handle cases where the secret isn't set yet
-try:
-    if "GEMINI_API_KEY" in st.secrets:
-        API_KEY = st.secrets["GEMINI_API_KEY"]
-    else:
-        API_KEY = None
-except Exception:
-    API_KEY = None
+# --- 2. LOAD SECRETS ---
+# Ensure you add both GEMINI_API_KEY and GROQ_API_KEY to Streamlit Secrets
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
+GROQ_KEY = st.secrets.get("GROQ_API_KEY")
 
 # --- 3. UI STYLING (Gemini Modern Light) ---
 st.markdown("""
     <style>
     .stApp { background-color: #F0F4F9; color: #1F1F1F; }
     [data-testid="stSidebar"] { background-color: #E9EEF6 !important; }
-    .stTextArea textarea {
-        background-color: #FFFFFF !important;
-        border-radius: 15px !important;
-        border: 1px solid #DDE3EA !important;
-    }
+    .stTextArea textarea { background-color: #FFFFFF !important; border-radius: 15px !important; }
     .stButton>button {
-        background-color: #0B57D0;
-        color: white;
-        border-radius: 100px;
-        width: 100%;
-        border: none;
-        height: 3em;
-        font-weight: bold;
+        background-color: #0B57D0; color: white; border-radius: 100px;
+        width: 100%; border: none; font-weight: bold; height: 3em;
     }
     .task-card {
-        background-color: #FFFFFF;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #DDE3EA;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        background-color: #FFFFFF; padding: 20px; border-radius: 15px;
+        border: 1px solid #DDE3EA; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. MAIN INTERFACE ---
+# --- 4. APP INTERFACE ---
 st.title("⚡ AI Daily Architect")
-st.write("Organize your day with Gemini 2.0 Flash")
+st.write("Intelligent scheduling with multi-model backup.")
 
 with st.sidebar:
     st.image("https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ef62337744f77.svg", width=40)
     energy = st.select_slider("Energy Level", options=["Low", "Medium", "High"])
     st.divider()
-    st.caption("Final Year Project • Powered by Google")
+    if GEMINI_KEY and GROQ_KEY:
+        st.success("✅ Systems Ready")
+    else:
+        st.warning("⚠️ Some API keys are missing in Secrets.")
 
-# Fixed the 'label' warning from your logs
-user_prompt = st.text_area(
-    "Enter your tasks:", 
-    placeholder="e.g., OpenCV project for 2 hours, Lunch with mom, Gym at 6 PM...",
-    label_visibility="collapsed",
-    height=150
-)
+user_prompt = st.text_area("What are your tasks?", placeholder="e.g. OpenCV project, Gym at 6 PM...", height=150, label_visibility="collapsed")
 
-# --- 5. EXECUTION LOGIC ---
+# --- 5. DUAL-ENGINE GENERATION ---
 if st.button("Generate My Plan"):
-    if not API_KEY:
-        st.error("❌ **API Key Missing!** Please go to Streamlit Cloud Settings > Secrets and add: GEMINI_API_KEY = 'your_key'")
-    elif not user_prompt:
-        st.warning("Please enter some tasks first!")
+    if not user_prompt:
+        st.warning("Please enter your tasks first!")
     else:
         with st.spinner("✨ Architecting your day..."):
-            try:
-                client = genai.Client(api_key=API_KEY)
-                response = client.models.generate_content(
-                    model="gemini-2.0-flash", 
-                    contents=f"User Tasks: {user_prompt}. Energy: {energy}. Create a clear, time-blocked daily schedule."
-                )
-                
-                st.markdown("### 📅 Your Optimized Blueprint")
-                st.markdown(f'<div class="task-card">{response.text}</div>', unsafe_allow_html=True)
+            success = False
+            
+            # --- TRY GEMINI FIRST ---
+            if GEMINI_KEY:
+                try:
+                    client = genai.Client(api_key=GEMINI_KEY)
+                    response = client.models.generate_content(
+                        model="gemini-1.5-flash", 
+                        contents=f"Tasks: {user_prompt}. Energy: {energy}. Create a time-blocked schedule."
+                    )
+                    output = response.text
+                    engine_used = "Gemini 1.5 Flash"
+                    success = True
+                except Exception as e:
+                    if "429" in str(e):
+                        st.info("🔄 Gemini is busy... switching to Backup Engine (Groq).")
+                    else:
+                        st.error(f"Gemini Error: {e}")
+
+            # --- FALLBACK TO GROQ ---
+            if not success and GROQ_KEY:
+                try:
+                    groq_client = Groq(api_key=GROQ_KEY)
+                    chat_completion = groq_client.chat.completions.create(
+                        messages=[{"role": "user", "content": f"Create a daily schedule for: {user_prompt}. Energy: {energy}"}],
+                        model="llama-3.3-70b-versatile",
+                    )
+                    output = chat_completion.choices[0].message.content
+                    engine_used = "Llama 3.3 (via Groq)"
+                    success = True
+                except Exception as e:
+                    st.error(f"Backup Engine failed too: {e}")
+
+            # --- DISPLAY RESULT ---
+            if success:
+                st.markdown(f"### 📅 Your Blueprint (via {engine_used})")
+                st.markdown(f'<div class="task-card">{output}</div>', unsafe_allow_html=True)
                 st.balloons()
 
-            except Exception as e:
-                # If the API key is invalid, it will show this clearly
-                if "API_KEY_INVALID" in str(e):
-                    st.error("❌ **Invalid API Key!** The key in your Secrets is not recognized by Google. Please generate a new one at Google AI Studio.")
-                else:
-                    st.error(f"⚠️ An error occurred: {e}")
-
 st.markdown("---")
-st.caption("Created by Supriya Reddy")
+st.caption("Developed by Supriya Reddy")
